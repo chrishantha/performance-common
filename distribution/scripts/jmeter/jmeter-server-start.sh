@@ -18,6 +18,7 @@
 # ----------------------------------------------------------------------------
 
 script_dir=$(dirname "$0")
+alpn_path=$2
 
 jar_name=ApacheJMeter.jar
 jmeter_hostname=""
@@ -91,7 +92,7 @@ if [[ -f $gc_log_file ]]; then
     mv $gc_log_file /tmp/
 fi
 
-export JVM_ARGS="-Xms4g -Xmx4g -XX:+PrintGC -XX:+PrintGCDetails -XX:+PrintGCDateStamps -Xloggc:$gc_log_file"
+export JVM_ARGS="-Xms4g -Xmx4g -XX:+PrintGC -XX:+PrintGCDetails -XX:+PrintGCDateStamps -Xloggc:$gc_log_file -Xbootclasspath/p:${alpn_path}"
 export RMI_HOST_DEF=-Djava.rmi.server.hostname=$jmeter_hostname
 
 echo "Starting JMeter Server"
