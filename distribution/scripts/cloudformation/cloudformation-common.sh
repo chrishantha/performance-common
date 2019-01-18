@@ -48,6 +48,7 @@ s3_bucket_region=""
 jmeter_client_ec2_instance_type=""
 jmeter_server_ec2_instance_type=""
 netty_ec2_instance_type=""
+test_script=""
 # GCViewer Jar file to analyze GC logs
 gcviewer_jar_path=""
 default_minimum_stack_creation_wait_time=5
@@ -94,10 +95,11 @@ function usage() {
     echo "-w: The minimum time to wait in minutes before polling for cloudformation stack's CREATE_COMPLETE status."
     echo "    Default: $default_minimum_stack_creation_wait_time."
     echo "-h: Display this help and exit."
+    echo "[-m: Test script to run.]"
     echo ""
 }
 
-while getopts "f:d:k:n:j:o:g:s:b:r:J:S:N:t:p:w:h" opts; do
+while getopts "f:d:k:n:j:o:g:s:b:r:J:S:N:t:p:w:h:m" opts; do
     case $opts in
     f)
         performance_scripts_distribution=${OPTARG}
@@ -150,6 +152,9 @@ while getopts "f:d:k:n:j:o:g:s:b:r:J:S:N:t:p:w:h" opts; do
     h)
         usage
         exit 0
+        ;;
+    m)
+        test_script=${OPTARG}
         ;;
     \?)
         usage
@@ -312,6 +317,18 @@ if ! function_exists get_columns; then
     exit 1
 fi
 
+if [[ -z $test_script ]]; then
+    test_script=run-performance-tests.sh
+    exit 1
+fi
+
+test_script_filename=$(basename "$test_script")
+
+if ! [[ ${test_script_filename: -3} != ".sh" ]]; then
+    echo "Please specify the .sh test script."
+    exit 1
+fi
+
 echo "Checking whether python requirements are installed..."
 pip install -r $script_dir/python-requirements.txt
 
@@ -344,7 +361,7 @@ for key in "${!test_parameters[@]}"; do
 done
 jq -n $test_parameters_args "$test_parameters_json" >$results_dir/cf-test-metadata.json
 
-estimate_command="$script_dir/../jmeter/run-performance-tests.sh -t ${run_performance_tests_options[@]}"
+estimate_command="$script_dir/../jmeter/$test_script_filename -t ${run_performance_tests_options[@]}"
 echo "Estimating total time for performance tests: $estimate_command"
 # Estimating this script will also validate the options. It's important to validate options before creating the stack.
 $estimate_command
@@ -431,7 +448,7 @@ for ((i = 0; i < ${#performance_test_options[@]}; i++)); do
     fi
     jmeter_servers_per_stack+=("$jmeter_servers")
     performance_test_options[$i]+=" -n $jmeter_servers"
-    estimate_command="$script_dir/../jmeter/run-performance-tests.sh -t ${performance_test_options[$i]}"
+    estimate_command="$script_dir/../jmeter/$test_script_filename -t ${performance_test_options[$i]}"
     echo "$(($i + 1)): Estimating total time for the tests in stack $(($i + 1)) with $jmeter_servers JMeter server(s) handling a maximum of $max_concurrent_users concurrent users: $estimate_command"
     $estimate_command
 done
@@ -587,7 +604,7 @@ function run_perf_tests_in_stack() {
     jmeter_client_ip="$(aws cloudformation describe-stacks --stack-name $stack_id --query 'Stacks[0].Outputs[?OutputKey==`JMeterClientPublicIP`].OutputValue' --output text)"
     echo "JMeter Client Public IP: $jmeter_client_ip"
 
-    run_performance_tests_command="./jmeter/run-performance-tests.sh ${performance_test_options[$index]}"
+    run_performance_tests_command="./jmeter/$test_script_filename ${performance_test_options[$index]}"
     # Run performance tests
     run_remote_tests="ssh -i $key_file -o "StrictHostKeyChecking=no" -T ubuntu@$jmeter_client_ip $run_performance_tests_command"
     echo "Running performance tests: $run_remote_tests"
